@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mahalaxmi Enterprises</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-blue-50 font-sans min-h-screen">
+    
+    <!-- Header -->
+    <header class="bg-blue-600 text-white shadow-lg">
+        <div class="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
+            <div>
+                <h1 class="text-2xl font-bold tracking-tight">Mahalaxmi Enterprises</h1>
+                <p class="text-blue-200 text-sm mt-1 flex items-center">
+                    Laundry Management System
+                    <span id="cloudIcon" class="ml-2 hidden text-green-300 font-bold">⚡ Connected</span>
+                </p>
+            </div>
+            <div class="flex space-x-3">
+                <a href="https://share.google/ZxC8V1OozTgjtd3UQ" target="_blank" class="p-2 bg-blue-500 rounded-full hover:bg-blue-400">Map</a>
+                <a href="https://fabrico.in/" target="_blank" class="p-2 bg-blue-500 rounded-full hover:bg-blue-400">Web</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-4xl mx-auto px-4 py-8">
+        <!-- Add Order Form -->
+        <div class="bg-white rounded-xl shadow-md p-6 mb-8 border border-blue-100">
+            <h2 class="text-lg font-semibold text-blue-800 mb-4">नया कपड़ा रैक में रखें</h2>
+            <form id="addOrderForm" class="flex flex-col sm:flex-row gap-4">
+                <input type="text" id="orderId" placeholder="Order ID (e.g. 101)" class="flex-1 px-4 py-3 rounded-lg border focus:ring-2 focus:ring-blue-500 outline-none text-lg" required>
+                <input type="text" id="rackNo" placeholder="Rack Number (e.g. A-1)" class="flex-1 px-4 py-3 rounded-lg border focus:ring-2 focus:ring-blue-500 outline-none text-lg uppercase" required>
+                <button type="submit" class="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700">Save to Rack</button>
+            </form>
+        </div>
+
+        <!-- Tabs -->
+        <div class="flex border-b border-gray-300 mb-6">
+            <button id="tabActive" class="py-3 px-6 font-semibold text-blue-600 border-b-2 border-blue-600 w-1/2 text-center">रैक में रखे हैं (<span id="activeCount">0</span>)</button>
+            <button id="tabHistory" class="py-3 px-6 font-semibold text-gray-500 hover:text-blue-500 w-1/2 text-center">डिलीवर हो गए (<span id="historyCount">0</span>)</button>
+        </div>
+
+        <!-- Orders List -->
+        <div id="ordersContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Cards will appear here -->
+        </div>
+    </main>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-app.js";
+        import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-firestore.js";
+
+        // Your Firebase keys
+        const firebaseConfig = {
+            apiKey: "AIzaSyCjzjnNXaRC0-Jd_0GazG6Pi-7gb9qXtYM",
+            authDomain: "mahalaxmi-laundry-manager.firebaseapp.com",
+            projectId: "mahalaxmi-laundry-manager",
+            storageBucket: "mahalaxmi-laundry-manager.firebasestorage.app",
+            messagingSenderId: "1060747858350",
+            appId: "1:1060747858350:web:071c39a5ca51652d6ef83f"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        let allOrders = [];
+        let currentTab = 'active';
+
+        const addOrderForm = document.getElementById('addOrderForm');
+        const ordersContainer = document.getElementById('ordersContainer');
+        const tabActive = document.getElementById('tabActive');
+        const tabHistory = document.getElementById('tabHistory');
+        const activeCount = document.getElementById('activeCount');
+        const historyCount = document.getElementById('historyCount');
+        const cloudIcon = document.getElementById('cloudIcon');
+
+        // Fetch Data Live
+        const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
+        onSnapshot(q, (snapshot) => {
+            allOrders = [];
+            snapshot.forEach((doc) => allOrders.push({ id: doc.id, ...doc.data() }));
+            cloudIcon.classList.remove('hidden');
+            renderOrders();
+        });
+
+        // Add New Order
+        addOrderForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const orderId = document.getElementById('orderId').value;
+            const rackNo = document.getElementById('rackNo').value.toUpperCase();
+            
+            if(orderId && rackNo) {
+                await addDoc(collection(db, 'orders'), {
+                    orderId: orderId,
+                    rackNo: rackNo,
+                    status: 'active',
+                    createdAt: serverTimestamp()
+                });
+                document.getElementById('orderId').value = '';
+                document.getElementById('rackNo').value = '';
+            }
+        });
+
+        // Actions
+        window.markDelivered = async (id) => await updateDoc(doc(db, 'orders', id), { status: 'delivered', deliveredAt: serverTimestamp() });
+        window.undoDelivery = async (id) => await updateDoc(doc(db, 'orders', id), { status: 'active', deliveredAt: null });
+        window.permanentlyDelete = async (id) => {
+            if (confirm("क्या आप इसे हमेशा के लिए डिलीट करना चाहते हैं?")) await deleteDoc(doc(db, 'orders', id));
+        };
+
+        // Tab Switching
+        tabActive.addEventListener('click', () => {
+            currentTab = 'active';
+            tabActive.className = "py-3 px-6 font-semibold text-blue-600 border-b-2 border-blue-600 w-1/2 text-center";
+            tabHistory.className = "py-3 px-6 font-semibold text-gray-500 hover:text-blue-500 w-1/2 text-center";
+            renderOrders();
+        });
+
+        tabHistory.addEventListener('click', () => {
+            currentTab = 'history';
+            tabHistory.className = "py-3 px-6 font-semibold text-blue-600 border-b-2 border-blue-600 w-1/2 text-center";
+            tabActive.className = "py-3 px-6 font-semibold text-gray-500 hover:text-blue-500 w-1/2 text-center";
+            renderOrders();
+        });
+
+        // Render Cards
+        function renderOrders() {
+            const activeOrders = allOrders.filter(o => o.status === 'active');
+            const historyOrders = allOrders.filter(o => o.status === 'delivered');
+            
+            activeCount.innerText = activeOrders.length;
+            historyCount.innerText = historyOrders.length;
+            
+            const listToRender = currentTab === 'active' ? activeOrders : historyOrders;
+            let html = '';
+
+            if(listToRender.length === 0) {
+                html = `<div class="col-span-full text-center py-12 text-gray-400 font-medium">कोई डेटा नहीं है।</div>`;
+            } else {
+                listToRender.forEach(order => {
+                    if(currentTab === 'active') {
+                        html += `
+                        <div class="bg-white rounded-xl shadow-sm border border-blue-100 overflow-hidden relative">
+                            <div class="bg-blue-50 px-4 py-2 border-b border-blue-100"><span class="font-bold text-gray-700">Order #${order.orderId}</span></div>
+                            <div class="p-6 text-center">
+                                <p class="text-sm text-gray-500 mb-1">Rack Number</p>
+                                <p class="text-5xl font-black text-blue-600 tracking-wider">${order.rackNo}</p>
+                            </div>
+                            <div class="px-4 py-3 bg-gray-50">
+                                <button onclick="markDelivered('${order.id}')" class="w-full bg-green-500 text-white py-3 rounded-lg font-bold">Deliver</button>
+                            </div>
+                        </div>`;
+                    } else {
+                        html += `
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden relative opacity-75">
+                            <div class="bg-gray-100 px-4 py-2 border-b border-gray-200"><span class="font-bold text-gray-600">Order #${order.orderId}</span></div>
+                            <div class="p-6 text-center">
+                                <p class="text-sm text-gray-500 mb-1">Rack Number</p>
+                                <p class="text-4xl font-bold text-gray-400 line-through">${order.rackNo}</p>
+                            </div>
+                            <div class="px-4 py-3 bg-gray-50 flex gap-2">
+                                <button onclick="undoDelivery('${order.id}')" class="flex-1 bg-yellow-500 text-white py-2 rounded-lg font-bold">Undo</button>
+                                <button onclick="permanentlyDelete('${order.id}')" class="flex-1 bg-red-500 text-white py-2 rounded-lg font-bold">Delete</button>
+                            </div>
+                        </div>`;
+                    }
+                });
+            }
+            ordersContainer.innerHTML = html;
+        }
+    </script>
+</body>
+  </html>
+  
